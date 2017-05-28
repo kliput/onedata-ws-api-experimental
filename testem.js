@@ -1,13 +1,13 @@
 /*jshint node:true*/
 module.exports = {
-  "framework": "qunit",
+  "framework": "mocha",
   "test_page": "tests/index.html?hidepassed",
+  "report_file": "tests/test-results.xml",
   "disable_watching": true,
   "launch_in_ci": [
-    "PhantomJS"
+    "Firefox"
   ],
   "launch_in_dev": [
-    "PhantomJS",
     "Chrome"
   ]
 };
