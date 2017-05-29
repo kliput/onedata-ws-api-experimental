@@ -9,11 +9,6 @@ const {
 } = Ember;
 
 /**
- * Path where WS server is hosted
- */
-const WS_ENDPOINT = '/ws/';
-
-/**
  * Default value for ``responseTimeout`` in service
  * @type {number}
  */
@@ -63,9 +58,10 @@ export default Ember.Service.extend(Evented, {
     this.set('_initDefer', _initDefer);
     let protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
     let host = window.location.hostname;
-    let port = window.location.port;
+    // let port = window.location.port;
+    let port = 8001;
 
-    let url = protocol + host + (port === '' ? '' : ':' + port) + WS_ENDPOINT;
+    let url = protocol + host + (port === '' ? '' : ':' + port);
 
     try {
       let socket = new WebSocketClass(url);
@@ -75,6 +71,8 @@ export default Ember.Service.extend(Evented, {
       socket.onerror = this._onError.bind(this);
       socket.onclose = this._onClose.bind(this);
       this.set('_webSocket', socket);
+
+      // FIXME send me a handshake it will be better for me
     } catch (error) {
       console.error(`WebSocket initializtion error: ${error}`);
       _initDefer.reject(error);
@@ -88,10 +86,11 @@ export default Ember.Service.extend(Evented, {
    * The promise rejects on:
    * - uuid collision
    * - websocket adapter exception
-   * @type {object} message
+   * @param {object} message
+   * @param {string} subtype one of: handshake, rpc, graph
    * @return {Promise}
    */
-  send(message) {
+  send(subtype, message) {
     let {
       socket,
       _deferredMessages,
@@ -101,21 +100,27 @@ export default Ember.Service.extend(Evented, {
       '_deferredMessages',
       'responseTimeout'
     );
-    let uuid = this._generateUuid();
-    // TODO message is modified - it's efficient but not safe
-    message.uuid = uuid;
+    let id = this._generateUuid();
+    let rawMessage = {
+      id,
+      type: 'request',
+      subtype,
+      payload: message,
+    };
     let sendDeferred = defer();
-    if (_deferredMessages.has(uuid)) {
+    if (_deferredMessages.has(id)) {
       // TODO: reason - collision
       sendDeferred.reject({
         error: 'collision',
         details: {
-          uuid
+          id
         },
       });
     }
     try {
-      socket.send(message);
+      let rawMessageString = JSON.stringify(rawMessage);
+      console.debug(`onedata-websocket: Will send: ${rawMessageString}`);
+      socket.send(rawMessageString);
     } catch (error) {
       sendDeferred.reject({
         error: 'send-failed',
@@ -124,11 +129,11 @@ export default Ember.Service.extend(Evented, {
         }
       });
     }
-    _deferredMessages.set(uuid, sendDeferred);
+    _deferredMessages.set(id, sendDeferred);
     // FIXME register timeout and clear it after message resolve
     // FIXME optimize - do not create whole function every time
     window.setTimeout(function () {
-      if (_deferredMessages.has(uuid)) {
+      if (_deferredMessages.has(id)) {
         sendDeferred.reject({
           error: 'timeout',
         });
@@ -144,14 +149,13 @@ export default Ember.Service.extend(Evented, {
   // TODO move unpacking into protocol level?
   // TODO currently supporting only batch messages
   _onMessage({ data }) {
-    let batch = JSON.parse(data).batch;
+    data = JSON.parse(data);
 
-    // FIXME a hack
-    if (!Array.isArray(batch)) {
-      batch = [batch];
+    if (data.batch) {
+      data.batch.forEach(m => this._handleMessage(m));
+    } else {
+      this._handleMessage(data);
     }
-    // messages are considered to be batched
-    batch.forEach(m => this._handleMessage(m));
   },
 
   _onError( /*event*/ ) {},
@@ -181,7 +185,7 @@ export default Ember.Service.extend(Evented, {
    * @param {object} message 
    */
   _handleMessage(message) {
-    console.debug(`Hadling message: ${JSON.stringify(message)}`);
+    console.debug(`onedata-websocket: Handling message: ${JSON.stringify(message)}`);
     let {
       type,
     } = message;
@@ -196,21 +200,47 @@ export default Ember.Service.extend(Evented, {
   },
 
   _handlePushMessage(message) {
-    this.trigger('push', message);
+    // HACK convert push error message to response message
+    let badMessageId = this._badMessageId(message);
+    if (badMessageId) {
+      // TODO possibly unsafe
+      message.id = badMessageId;
+      message.type = 'response';
+      this._handleResponseMessage(message);
+    } else {
+      this.trigger('push', message);
+    }
   },
 
   _handleResponseMessage(message) {
     let _deferredMessages = this.get('_deferredMessages');
     let {
-      uuid,
+      id,
     } = message;
-    if (_deferredMessages.has(uuid)) {
-      let deferred = _deferredMessages.get(uuid);
+    if (_deferredMessages.has(id)) {
+      let deferred = _deferredMessages.get(id);
       // NOTE Map.delete will not work on IE 10 or lower
-      _deferredMessages.delete(uuid);
+      _deferredMessages.delete(id);
       deferred.resolve(message);
     } else {
-      throw `Tried to handle message with unknown UUID: ${uuid}`;
+      throw `Tried to handle message with unknown UUID: ${id}`;
+    }
+  },
+
+  /** 
+   * @return {string}
+   */
+  _badMessageId(message) {
+    if (
+      message.type === 'push' &&
+      message.payload &&
+      message.payload.error &&
+      message.payload.error.id === 'badMessage'
+    ) {
+      let requestMessage = JSON.parse(message.payload.error.details.message);
+      return requestMessage.id;
+    } else {
+      return undefined;
     }
   },
 });

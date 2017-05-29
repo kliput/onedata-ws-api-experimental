@@ -1,6 +1,7 @@
 <p>Hello api example</p>
 <strong>Initialized:</strong> <span>{{websocketInitialized}}</span>
 {{#if websocketInitialized}}
+  <button {{action (action "handshake")}}>Handshake</button>
   {{input type="text" value=messageValue}}
   <button {{action (action "sendMessage")}}>Send me message</button>
 {{/if}}

@@ -19,10 +19,17 @@ export default Ember.Component.extend({
   },
 
   actions: {
-    sendMessage() {
-      this.get('onedataWebsocket').send({
-        message: this.get('messageValue')
+    handshake() {
+      this.get('onedataWebsocket').send('handshake', {
+        supportedVersions: [1],
+        sessionId: null,
       });
+    },
+    sendMessage() {
+      this.get('onedataWebsocket').send('rpc', {
+        function: this.get('messageValue'),
+        args: {},
+      }).then(resp => this.set('messageResponse', JSON.stringify(resp)));
     },
   },
 });
