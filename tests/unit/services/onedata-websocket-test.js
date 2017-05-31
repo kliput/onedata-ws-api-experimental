@@ -64,4 +64,36 @@ describe('Unit | Service | onedata websocket', function () {
       });
     });
   });
+
+  it('handles message responses', function (done) {
+    let service = this.subject();
+    service.set('_webSocketClass', WebSocketMock);
+    const messageId = 'some_message_id';
+    const responsePayload = { x: 'good evening' };
+    service.set('_generateUuid', () => messageId);
+
+    service.initWebsocket().then(() => {
+      let _webSocket = service.get('_webSocket');
+
+      _webSocket.send = function () {
+        window.setTimeout(() => {
+          // response on any send
+          this.onmessage({
+            data: JSON.stringify({
+              id: messageId,
+              type: 'response',
+              payload: responsePayload
+            })
+          });
+        }, 0);
+      };
+
+      service.send({}).then(m => {
+        expect(m).has.property('payload');
+        expect(m.payload).has.property('x');
+        expect(m.payload.x).to.equal(responsePayload.x);
+        done();
+      });
+    });
+  });
 });
