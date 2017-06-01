@@ -1,11 +1,11 @@
 <p>Hello api example</p>
 <strong>Initialized:</strong> <span>{{websocketInitialized}}</span>
 {{#if websocketInitialized}}
-  <button {{action (action "handshake")}}>Handshake</button>
-  {{input type="text" value=messageValue}}
-  <button {{action (action "sendMessage")}}>Send me message</button>
+  {{!--{{input type="text" value=messageValue}}--}}
+  <button {{action (action "sendRpc")}}>RPC</button>
+  <button {{action (action "getRecord")}}>Get user</button>
 {{/if}}
 {{#if messageResponse}}
-  <div>It's better for me:</div>
-  <div>{{messageResponse}}</div>
+  <div>RPC response:</div>
+  <code>{{messageResponse}}</code>
 {{/if}}

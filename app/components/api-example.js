@@ -6,6 +6,8 @@ const {
 
 export default Ember.Component.extend({
   onedataWebsocket: service(),
+  onedataRpc: service(),
+  onedataGraph: service(),
 
   messageValue: null,
 
@@ -19,17 +21,15 @@ export default Ember.Component.extend({
   },
 
   actions: {
-    handshake() {
-      this.get('onedataWebsocket').send('handshake', {
-        supportedVersions: [1],
-        sessionId: null,
-      });
+    sendRpc() {
+      this.get('onedataRpc').request('testRPC', {}).then(resp =>
+        this.set('messageResponse', JSON.stringify(resp))
+      );
     },
-    sendMessage() {
-      this.get('onedataWebsocket').send('rpc', {
-        function: 'testRPC',
-        args: {},
-      }).then(resp => this.set('messageResponse', JSON.stringify(resp)));
-    },
-  },
+    getRecord() {
+      this.get('onedataGraph').getRecord('user', 'user1').then(resp =>
+        this.set('messageResponse', JSON.stringify(resp))
+      );
+    }
+  }
 });
