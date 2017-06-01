@@ -26,7 +26,7 @@ describe('Unit | Service | onedata websocket', function () {
 
     service.set('_webSocketClass', WebSocketMock);
 
-    let promise = service.initWebsocket();
+    let promise = service._initWebsocket();
     promise.then(() => {
       promiseResolved = true;
     });
@@ -53,7 +53,7 @@ describe('Unit | Service | onedata websocket', function () {
       }
     });
 
-    service.initWebsocket().then(() => {
+    service._initWebsocket().then(() => {
       let _webSocket = service.get('_webSocket');
       _webSocket.onmessage({
         data: JSON.stringify({ batch: [{ type: 'push', payload: 'hello' }] })
@@ -72,7 +72,7 @@ describe('Unit | Service | onedata websocket', function () {
     const responsePayload = { x: 'good evening' };
     service.set('_generateUuid', () => messageId);
 
-    service.initWebsocket().then(() => {
+    service._initWebsocket().then(() => {
       let _webSocket = service.get('_webSocket');
 
       _webSocket.send = function () {

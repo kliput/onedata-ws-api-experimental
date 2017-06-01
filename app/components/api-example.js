@@ -12,7 +12,7 @@ export default Ember.Component.extend({
   init() {
     this._super(...arguments);
     let onedataWebsocket = this.get('onedataWebsocket');
-    onedataWebsocket.initWebsocket().then(
+    onedataWebsocket.initConnection().then(
       () => this.set('websocketInitialized', true),
       () => this.set('websocketInitialized', false)
     );
@@ -27,7 +27,7 @@ export default Ember.Component.extend({
     },
     sendMessage() {
       this.get('onedataWebsocket').send('rpc', {
-        function: this.get('messageValue'),
+        function: 'testRPC',
         args: {},
       }).then(resp => this.set('messageResponse', JSON.stringify(resp)));
     },

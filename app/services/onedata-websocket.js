@@ -3,10 +3,16 @@ import _zipObject from 'lodash/zipObject';
 
 const {
   RSVP: { defer },
+  computed,
   computed: { readOnly },
   Evented,
   String: { camelize },
+  ObjectProxy,
+  PromiseProxyMixin,
+  RSVP: { Promise },
 } = Ember;
+
+const ObjectPromiseProxy = ObjectProxy.extend(PromiseProxyMixin);
 
 /**
  * Default value for ``responseTimeout`` in service
@@ -26,6 +32,26 @@ export default Ember.Service.extend(Evented, {
    */
   responseTimeout: RESPONSE_TIMEOUT_MS,
 
+  /**
+   * Object promise proxy that isResolved when WebSocket is initialized
+   * @type {ObjectPromiseProxy}
+   */
+  webSocketInitializedProxy: computed('_initDefer.promise', function () {
+    return ObjectPromiseProxy.create({
+      promise: this.get('_initDefer.promise') ||
+        new Promise((_, reject) => reject())
+    });
+  }).readOnly(),
+
+  /**
+   * True if there is opened WebSocket available in this service
+   * @type {boolean}
+   */
+  webSocketIsOpened: readOnly('webSocketInitializedProxy.isFulfilled'),
+
+  /**
+   * @type {RSVP.Deferred}
+   */
   _initDefer: null,
 
   /**
@@ -49,36 +75,13 @@ export default Ember.Service.extend(Evented, {
 
   initPromise: readOnly('_initDefer.promise'),
 
-  initWebsocket() {
-    let {
-      _webSocketClass: WebSocketClass,
-    } = this.getProperties('_webSocketClass');
-
-    let _initDefer = defer();
-    this.set('_initDefer', _initDefer);
-    let protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
-    let host = window.location.hostname;
-    // let port = window.location.port;
-    let port = 8001;
-
-    let url = protocol + host + (port === '' ? '' : ':' + port);
-
-    try {
-      let socket = new WebSocketClass(url);
-      this.set('socket', socket);
-      socket.onopen = this._onOpen.bind(this);
-      socket.onmessage = this._onMessage.bind(this);
-      socket.onerror = this._onError.bind(this);
-      socket.onclose = this._onClose.bind(this);
-      this.set('_webSocket', socket);
-
-      // FIXME send me a handshake it will be better for me
-    } catch (error) {
-      console.error(`WebSocket initializtion error: ${error}`);
-      _initDefer.reject(error);
-    }
-
-    return _initDefer.promise;
+  /**
+   * @param {object} options
+   * @param {number} options.protocolVersion
+   * @returns {Promise} resolves with success handshake message
+   */
+  initConnection(options) {
+    return this._initWebsocket().then(() => this._handshake(options));
   },
 
   /**
@@ -142,6 +145,41 @@ export default Ember.Service.extend(Evented, {
     return sendDeferred.promise;
   },
 
+  /**
+   * Creates WebSocket and opens connection
+   * @returns {Promise} resolves when websocket is opened successfully
+   */
+  _initWebsocket() {
+    let {
+      _webSocketClass: WebSocketClass,
+    } = this.getProperties('_webSocketClass');
+
+    let _initDefer = defer();
+    this.set('_initDefer', _initDefer);
+    let protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
+    let host = window.location.hostname;
+    let port = 8001;
+
+    let url = protocol + host + (port === '' ? '' : ':' + port);
+
+    try {
+      let socket = new WebSocketClass(url);
+      this.set('socket', socket);
+      socket.onopen = this._onOpen.bind(this);
+      socket.onmessage = this._onMessage.bind(this);
+      socket.onerror = this._onError.bind(this);
+      socket.onclose = this._onClose.bind(this);
+      this.set('_webSocket', socket);
+
+      // FIXME send me a handshake it will be better for me
+    } catch (error) {
+      console.error(`WebSocket initializtion error: ${error}`);
+      _initDefer.reject(error);
+    }
+
+    return _initDefer.promise;
+  },
+
   _onOpen( /*event*/ ) {
     this.get('_initDefer').resolve();
   },
@@ -152,10 +190,37 @@ export default Ember.Service.extend(Evented, {
     data = JSON.parse(data);
 
     if (data.batch) {
-      data.batch.forEach(m => this._handleMessage(m));
+      // not using forEach for performance
+      let batch = data.batch;
+      let length = batch.length;
+      for (let i = 0; i < length; ++i) {
+        this._handleMessage(batch[i]);
+      }
     } else {
       this._handleMessage(data);
     }
+  },
+
+  /**
+   * @param {object} options
+   * @param {number} protocolVersion
+   * @returns {Promise}
+   */
+  _handshake({ protocolVersion } = { protocolVersion: 1 }) {
+    return new Promise((resolve, reject) => {
+      let handshaking = this.send('handshake', {
+        supportedVersions: [protocolVersion],
+        sessionId: null,
+      });
+      handshaking.then(({ payload: { success, data, error } }) => {
+        if (success) {
+          resolve(data);
+        } else {
+          reject(error);
+        }
+      });
+      handshaking.catch(reject);
+    });
   },
 
   _onError( /*event*/ ) {},
