@@ -27,7 +27,7 @@ export default Ember.Component.extend({
       );
     },
     getRecord() {
-      this.get('onedataGraph').getRecord('user', 'user1').then(resp =>
+      this.get('onedataGraph').getRecord('od_user', 'user1').then(resp =>
         this.set('messageResponse', JSON.stringify(resp))
       );
     }
